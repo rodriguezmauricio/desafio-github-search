@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
+import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat.startActivity
 import androidx.recyclerview.widget.RecyclerView
 import br.com.igorbag.githubsearch.R
@@ -15,7 +16,7 @@ class RepositoryAdapter(private val repositories: List<Repository>) :
     RecyclerView.Adapter<RepositoryAdapter.ViewHolder>() {
 
     var btnShareLister: (Repository) -> Unit = {}
-
+    var btnOpenBrowserLister: ((String) -> Unit)? = null
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         //@TODO 10 - Implementar o ViewHolder para os repositorios
@@ -29,6 +30,7 @@ class RepositoryAdapter(private val repositories: List<Repository>) :
 
         var nameTextView: TextView = itemView.findViewById(R.id.tv_repo_name)
         var shareButton: Button = itemView.findViewById(R.id.iv_share)
+        var btnOpenBrowser: CardView = itemView.findViewById(R.id.cv_open)
     }
 
 
@@ -57,13 +59,14 @@ class RepositoryAdapter(private val repositories: List<Repository>) :
             //}
 
 
-
-
             val repo = repositories[position]
             holder.nameTextView.text = repo.name
             holder.shareButton.setOnClickListener {
-                btnShareLister(repositories[position])
-
+                btnShareLister(repo)
+            }
+            holder.btnOpenBrowser.setOnClickListener {
+                val urlRepository = repo.htmlUrl
+                btnOpenBrowserLister?.invoke(urlRepository)
             }
         }
 

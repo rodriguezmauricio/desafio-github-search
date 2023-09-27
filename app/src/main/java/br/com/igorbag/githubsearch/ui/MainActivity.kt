@@ -10,11 +10,15 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import br.com.igorbag.githubsearch.R
 import br.com.igorbag.githubsearch.data.GitHubService
 import br.com.igorbag.githubsearch.domain.Repository
 import br.com.igorbag.githubsearch.ui.adapter.RepositoryAdapter
+import com.google.gson.Gson
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -28,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var listaRepositories: RecyclerView
     lateinit var githubApi: GitHubService
     var retrofit: Retrofit? = null
+    // Declare e inicialize a lista de repositórios (repoList) com alguns dados de exemplo
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +41,6 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         showUserName()
         setupRetrofit()
-        getAllReposByUserName()
     }
 
     // Metodo responsavel por realizar o setup da view e recuperar os Ids do layout
@@ -52,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         //@TODO 2 - colocar a acao de click do botao confirmar
         btnConfirmar.setOnClickListener {
             saveUserLocal()
+            loadRepositories()
         }
     }
 
@@ -69,6 +74,7 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Usuário $textoInserido salvo com sucesso!", Toast.LENGTH_SHORT).show()
     }
 
+
     private fun showUserName() {
         //@TODO 4- depois de persistir o usuario exibir sempre as informacoes no EditText  se a sharedpref possuir algum valor, exibir no proprio editText o valor salvo
         val sharedPreferences = getSharedPreferences("MyPreferences", Context.MODE_PRIVATE)
@@ -85,6 +91,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
 
     //Metodo responsavel por fazer a configuracao base do Retrofit
     fun setupRetrofit() {
@@ -105,41 +112,104 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+    // Metodo responsavel por compartilhar o link do repositorio selecionado
+    // @Todo 11 - Colocar esse metodo no click do share item do adapter
+    fun shareRepositoryLink(urlRepository: String) {
+        val sendIntent: Intent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, urlRepository)
+            type = "text/plain"
+        }
+        val shareIntent = Intent.createChooser(sendIntent, null)
+        startActivity(shareIntent)
+    }
+
+    // Metodo responsavel por abrir o browser com o link informado do repositorio
+    // @Todo 12 - Colocar esse metodo no click item do adapter
+    fun openBrowser(urlRepository: String) {
+        startActivity(
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(urlRepository)
+            )
+        )
+    }
+
+    private fun loadRepositories() {
+        val userName = nomeUsuario.text.toString()
+        val service = retrofit?.create(GitHubService::class.java)
+
+        service?.getAllRepositoriesByUser(userName)?.enqueue(object : Callback<List<Repository>> {
+            override fun onResponse(call: Call<List<Repository>>, response: Response<List<Repository>>) {
+                if (response.isSuccessful) {
+                    val repos = response.body()
+                    if (repos != null) {
+                        setupAdapter(repos)
+                    } else {
+                        Log.d("MainActivity", "A resposta não possui dados")
+                    }
+                } else {
+                    Log.d("MainActivity", "Resposta não foi bem-sucedida (${response.code()})")
+                }
+            }
+
+            override fun onFailure(call: Call<List<Repository>>, t: Throwable) {
+                Log.d("MainActivity", "A chamada falhou (por exemplo, problemas de rede)")
+            }
+        })
+    }
+
     // Metodo responsavel por realizar a configuracao do adapter
     fun setupAdapter(list: List<Repository>) {
         /*
             @TODO 7 - Implementar a configuracao do Adapter , construir o adapter e instancia-lo
             passando a listagem dos repositorios
          */
-        val recyclerView = findViewById<RecyclerView>(R.id.rv_lista_repositories) // Substitua pelo ID correto
+        val layoutManager = LinearLayoutManager(this)
+        listaRepositories.layoutManager = layoutManager
         val adapter = RepositoryAdapter(list)
-        recyclerView.adapter = adapter
 
+        // Configurar o ouvinte de clique para compartilhar o link do repositório
+        adapter.btnShareLister = { repository ->
+            shareRepositoryLink(repository.htmlUrl)
+        }
+
+        // Configurar o ouvinte de clique para abrir o navegador com o link do repositório
+        adapter.btnOpenBrowserLister = { urlRepository ->
+            openBrowser(urlRepository)
+        }
+
+        listaRepositories.adapter = adapter
     }
+
 
     //Metodo responsavel por buscar todos os repositorios do usuario fornecido
     fun getAllReposByUserName() {
         // TODO 6 - realizar a implementacao do callback do retrofit e chamar o metodo setupAdapter se retornar os dados com sucesso
         val service = retrofit?.create(GitHubService::class.java)
-        val textoInserido = nomeUsuario.toString()
+        val userName = nomeUsuario.text.toString()
 
-        service?.getAllRepositoriesByUser(textoInserido)?.enqueue(object :
+        service?.getAllRepositoriesByUser(userName)?.enqueue(object :
             Callback<List<Repository>> {
             override fun onResponse(
                 call: Call<List<Repository>>,
                 response: Response<List<Repository>>
+
             ) {
                 if (response.isSuccessful) {
                     // Os dados foram recuperados com sucesso
                     val repos = response.body()
+
                     if (repos != null) {
                         // Chame o método setupAdapter para processar os dados
                         setupAdapter(repos)
+                        Log.d("main activity", "dados da API: $repos")
                     } else {
                         Log.d("erro 1","Trate o caso em que a resposta não possui dados")
                     }
                 } else {
-                    Log.d("erro 2", "Trate o caso em que a resposta não foi bem-sucedida (por exemplo, erro 404)")
+                    Log.d("erro 2", "Trate o caso em que a resposta não foi bem-sucedida (${response.code()})")
                 }
             }
 
@@ -147,35 +217,6 @@ class MainActivity : AppCompatActivity() {
                 Log.d("erro 3","Trate o caso em que a chamada falhou (por exemplo, problemas de rede)")
             }
         })
-
-        // Metodo responsavel por compartilhar o link do repositorio selecionado
-        // @Todo 11 - Colocar esse metodo no click do share item do adapter
-        fun shareRepositoryLink(urlRepository: String) {
-            val sendIntent: Intent = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, urlRepository)
-                type = "text/plain"
-            }
-
-            val shareIntent = Intent.createChooser(sendIntent, null)
-            startActivity(shareIntent)
-        }
-
-        // Metodo responsavel por abrir o browser com o link informado do repositorio
-
-        // @Todo 12 - Colocar esse metodo no click item do adapter
-        fun openBrowser(urlRepository: String) {
-            startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse(urlRepository)
-                )
-            )
-
-
-        }
-
     }
-
 }
 
