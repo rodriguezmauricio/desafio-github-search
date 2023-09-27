@@ -1,22 +1,24 @@
 package br.com.igorbag.githubsearch.ui.adapter
 
-import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.cardview.widget.CardView
-import androidx.core.content.ContextCompat.startActivity
 import androidx.recyclerview.widget.RecyclerView
 import br.com.igorbag.githubsearch.R
 import br.com.igorbag.githubsearch.domain.Repository
+import retrofit2.Call
 
-class RepositoryAdapter(private val repositories: List<Repository>) :
+class RepositoryAdapter(private var repositories: List<Repository>) :
     RecyclerView.Adapter<RepositoryAdapter.ViewHolder>() {
 
     var btnShareLister: (Repository) -> Unit = {}
     var btnOpenBrowserLister: ((String) -> Unit)? = null
+
+
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         //@TODO 10 - Implementar o ViewHolder para os repositorios
@@ -29,12 +31,11 @@ class RepositoryAdapter(private val repositories: List<Repository>) :
         //    }
 
         var nameTextView: TextView = itemView.findViewById(R.id.tv_repo_name)
-        var shareButton: Button = itemView.findViewById(R.id.iv_share)
+        var shareButton: ImageView = itemView.findViewById(R.id.iv_share)
         var btnOpenBrowser: CardView = itemView.findViewById(R.id.cv_open)
     }
 
-
-        // Cria uma nova view
+         // Cria uma nova view
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view =
                 LayoutInflater.from(parent.context).inflate(R.layout.repository_item, parent, false)
@@ -76,8 +77,13 @@ class RepositoryAdapter(private val repositories: List<Repository>) :
             return repositories.size
         }
 
+    fun updateData(newRepositories: List<Repository>) {
+        repositories = newRepositories
+        notifyDataSetChanged()
+    }
 
     }
+
 
 
 

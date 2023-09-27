@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -16,9 +15,10 @@ import br.com.igorbag.githubsearch.R
 import br.com.igorbag.githubsearch.data.GitHubService
 import br.com.igorbag.githubsearch.domain.Repository
 import br.com.igorbag.githubsearch.ui.adapter.RepositoryAdapter
-import com.google.gson.Gson
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -31,12 +31,15 @@ class MainActivity : AppCompatActivity() {
     lateinit var btnConfirmar: Button
     lateinit var listaRepositories: RecyclerView
     lateinit var githubApi: GitHubService
-    var retrofit: Retrofit? = null
+    lateinit var repositoryAdapter: RepositoryAdapter
+
+
     // Declare e inicialize a lista de repositórios (repoList) com alguns dados de exemplo
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        Log.d("MainActivity", "onCreate chamado")
         setupView()
         setupListeners()
         showUserName()
@@ -56,7 +59,11 @@ class MainActivity : AppCompatActivity() {
         //@TODO 2 - colocar a acao de click do botao confirmar
         btnConfirmar.setOnClickListener {
             saveUserLocal()
-            loadRepositories()
+            Log.d("MainActivity1", "setupListeners: Antes de getAllReposByUserName")
+            getAllReposByUserName()
+            Log.d("MainActivity1", "setupListeners: Depois de getAllReposByUserName")
+
+
         }
     }
 
@@ -102,14 +109,11 @@ class MainActivity : AppCompatActivity() {
            lembre-se de utilizar o GsonConverterFactory mostrado no curso
         */
 
-        if (retrofit == null) {
-            val baseUrl = "https://api.github.com/"
-
-            retrofit = Retrofit.Builder()
-                .baseUrl(baseUrl)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
-        }
+        githubApi = Retrofit.Builder()
+            .baseUrl("https://api.github.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GitHubService::class.java)
     }
 
 
@@ -137,69 +141,80 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadRepositories() {
-        val userName = nomeUsuario.text.toString()
-        val service = retrofit?.create(GitHubService::class.java)
+        val username = nomeUsuario.text.toString()
+        Log.d("MainActivity1", "loadRepositories chamado com usuário: $username")
 
-        service?.getAllRepositoriesByUser(userName)?.enqueue(object : Callback<List<Repository>> {
-            override fun onResponse(call: Call<List<Repository>>, response: Response<List<Repository>>) {
+        // Crie uma CoroutineScope para fazer a chamada da API em uma corrotina
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val response = githubApi.getAllRepositoriesByUser(username).execute()
                 if (response.isSuccessful) {
-                    val repos = response.body()
-                    if (repos != null) {
-                        setupAdapter(repos)
-                    } else {
-                        Log.d("MainActivity", "A resposta não possui dados")
+                    val repositories = response.body()
+                    withContext(Dispatchers.Main) {
+                        if (repositories != null) {
+                            repositoryAdapter.updateData(repositories)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Nenhum repositório encontrado.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } else {
-                    Log.d("MainActivity", "Resposta não foi bem-sucedida (${response.code()})")
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Erro ao buscar repositórios.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Erro ao buscar repositórios.", Toast.LENGTH_SHORT).show()
                 }
             }
-
-            override fun onFailure(call: Call<List<Repository>>, t: Throwable) {
-                Log.d("MainActivity", "A chamada falhou (por exemplo, problemas de rede)")
-            }
-        })
+        }
     }
 
     // Metodo responsavel por realizar a configuracao do adapter
     fun setupAdapter(list: List<Repository>) {
         /*
-            @TODO 7 - Implementar a configuracao do Adapter , construir o adapter e instancia-lo
-            passando a listagem dos repositorios
-         */
+    @TODO 7 - Implementar a configuracao do Adapter , construir o adapter e instancia-lo
+    passando a listagem dos repositorios
+ */
         val layoutManager = LinearLayoutManager(this)
         listaRepositories.layoutManager = layoutManager
-        val adapter = RepositoryAdapter(list)
+
+        // Use a instância repositoryAdapter que você já criou
+        repositoryAdapter = RepositoryAdapter(list)
 
         // Configurar o ouvinte de clique para compartilhar o link do repositório
-        adapter.btnShareLister = { repository ->
+        repositoryAdapter.btnShareLister = { repository ->
             shareRepositoryLink(repository.htmlUrl)
         }
 
         // Configurar o ouvinte de clique para abrir o navegador com o link do repositório
-        adapter.btnOpenBrowserLister = { urlRepository ->
+        repositoryAdapter.btnOpenBrowserLister = { urlRepository ->
             openBrowser(urlRepository)
         }
 
-        listaRepositories.adapter = adapter
+        listaRepositories.adapter = repositoryAdapter
     }
 
 
     //Metodo responsavel por buscar todos os repositorios do usuario fornecido
     fun getAllReposByUserName() {
         // TODO 6 - realizar a implementacao do callback do retrofit e chamar o metodo setupAdapter se retornar os dados com sucesso
-        val service = retrofit?.create(GitHubService::class.java)
+        val service = githubApi
         val userName = nomeUsuario.text.toString()
 
-        service?.getAllRepositoriesByUser(userName)?.enqueue(object :
+        service.getAllRepositoriesByUser(userName).enqueue(object :
             Callback<List<Repository>> {
             override fun onResponse(
                 call: Call<List<Repository>>,
                 response: Response<List<Repository>>
 
+
             ) {
                 if (response.isSuccessful) {
                     // Os dados foram recuperados com sucesso
                     val repos = response.body()
+                    Log.d("MainActivity1", "onResponse: Dados recebidos com sucesso: $repos")
+
 
                     if (repos != null) {
                         // Chame o método setupAdapter para processar os dados
